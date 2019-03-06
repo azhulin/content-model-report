@@ -1,0 +1,151 @@
+<?php
+
+/**
+ * @file
+ * Contains content_model_report.module.
+ */
+
+/**
+ * Returns content model report data.
+ *
+ * @param string $for_entity_type
+ *   (optional) The entity type ID.
+ * @param string $for_bundle
+ *   (optional) The entity bundle.
+ *
+ * @return array
+ *   An associative array representing content model data.
+ */
+function content_model_report_data(string $for_entity_type = NULL, string $for_bundle = NULL): array {
+  static $data = NULL;
+  if (!isset($data)) {
+    $data = [];
+    $map = [
+      'node.*' => TRUE,
+      /*'media.*' => FALSE,*/
+    ];
+    $entity_type_manager = \Drupal::entityTypeManager();
+    $entity_type_bundle_info = \Drupal::service('entity_type.bundle.info');
+    foreach ($map as $key => $process) {
+      list($entity_type, $bundle) = explode('.', $key);
+      if ('*' === $bundle) {
+        unset($map[$key]);
+        $bundles_info = $entity_type_bundle_info->getBundleInfo($entity_type);
+        foreach (array_keys($bundles_info) as $bundle) {
+          $expanded_key = "$entity_type.$bundle";
+          isset($map[$expanded_key]) || $map[$expanded_key] = $process;
+        }
+      }
+    }
+    do {
+      $updated = FALSE;
+      foreach ($map as $key => &$process) {
+        if (!$process) {
+          continue;
+        }
+        $process = FALSE;
+        list($entity_type, $bundle) = explode('.', $key);
+        $label = $entity_type_manager->getDefinition($entity_type)->getLabel();
+        isset($data[$entity_type]) || $data[$entity_type] = [
+          'id' => $entity_type,
+          'label' => $label,
+          'bundles' => [],
+        ];
+        $bundle_info = $entity_type_bundle_info
+          ->getBundleInfo($entity_type)[$bundle] ?? NULL;
+        if (!$bundle_info) {
+          continue;
+        }
+        $references = [];
+        $data[$entity_type]['bundles'][$bundle] = [
+          'id' => $bundle,
+          'label' => $bundle_info['label'],
+          'fields' => _content_model_report_field_data(
+            $entity_type, $bundle, $references
+          ),
+        ];
+        foreach ($references as $reference) {
+          $updated = TRUE;
+          isset($map[$reference]) || $map[$reference] = TRUE;
+        }
+      }
+    } while ($updated);
+    $sort_callback = function ($a, $b) {
+      return $a['label'] <=> $b['label'];
+    };
+    uasort($data, $sort_callback);
+    foreach ($data as &$entity_type_data) {
+      uasort($entity_type_data['bundles'], $sort_callback);
+      foreach ($entity_type_data['bundles'] as &$fields_data) {
+        uasort($fields_data['fields'], $sort_callback);
+      }
+    }
+  }
+  $result = $data;
+  if (isset($for_entity_type)) {
+    $result = $result[$for_entity_type] ?? [];
+    if (isset($for_bundle)) {
+      $result = $result['bundles'][$for_bundle] ?? [];
+    }
+  }
+  return $result;
+}
+
+/**
+ * Returns field info for specified entity type and bundle.
+ *
+ * @param string $entity_type
+ *   The entity type ID.
+ * @param string $bundle
+ *   The entity type bundle.
+ * @param array &$references
+ *   (optional) Collected field references keys.
+ *
+ * @return array
+ *   An associative array containing field info.
+ */
+function _content_model_report_field_data(string $entity_type, string $bundle, array &$references = []): array {
+  static $include_base_fields = [
+    'block_content' => ['info'],
+    'node' => ['title'],
+    'taxonomy_term' => ['name', 'description', 'weight', 'parent'],
+  ];
+  $data = [];
+  $entity_field_manager = \Drupal::service('entity_field.manager');
+  $field_type_manager = \Drupal::service('plugin.manager.field.field_type');
+  $base_fields = $entity_field_manager->getBaseFieldDefinitions($entity_type);
+  $fields = $entity_field_manager->getFieldDefinitions($entity_type, $bundle);
+  $field_types = $field_type_manager->getDefinitions();
+  foreach ($fields as $field => $field_info) {
+    if (isset($base_fields[$field])
+        && !in_array($field, $include_base_fields[$entity_type] ?? [])) {
+      continue;
+    }
+    $field_references = [];
+    $field_type = $field_info->getType();
+    $reference_types = ['entity_reference', 'entity_reference_revisions'];
+    if (in_array($field_type, $reference_types)) {
+      $settings = $field_info->getSettings();
+      $target_type = $settings['target_type'] ?? NULL;
+      $target_bundles = $settings['handler_settings']['target_bundles'] ?? [];
+      if ($target_type && $target_bundles) {
+        foreach ($target_bundles as $target_bundle) {
+          $key = "$target_type.$target_bundle";
+          $field_references[$key] = $key;
+          $references[$key] = $key;
+        }
+        sort($field_references);
+      }
+    }
+    $data[$field] = [
+      'label' => (string) $field_info->getLabel(),
+      'description' => $field_info->getDescription(),
+      'type' => $field_type,
+      'type_label' => $field_types[$field_type]['label'] ?? '',
+      'required' => $field_info->isRequired(),
+      'translatable' => $field_info->isTranslatable(),
+      'references' => $field_references,
+    ];
+  }
+  return $data;
+}

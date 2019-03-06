@@ -1,0 +1,20 @@
+a.export {
+  float: right;
+  font-weight: bold;
+  padding: 1em 0;
+}
+
+td.flag-on > .form-item,
+td.flag-off > .form-item {
+  display: none;
+}
+
+td.flag-on:before {
+  color: #6a6;
+  content: "✔";
+}
+
+td.flag-off:before {
+  color: #a66;
+  content: "✘";
+}

@@ -1,0 +1,5 @@
+content_model_report.page:
+  title: 'Content model'
+  parent: system.admin_reports
+  description: 'View site content model.'
+  route_name: content_model_report.page

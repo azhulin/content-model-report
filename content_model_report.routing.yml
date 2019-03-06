@@ -1,0 +1,14 @@
+content_model_report.page:
+  path: '/admin/reports/content-model'
+  defaults:
+    _controller: 'Drupal\content_model_report\Controller\ContentModelReportController::page'
+    _title: 'Content Model'
+  requirements:
+    _permission: administer site configuration
+
+content_model_report.export:
+  path: '/admin/reports/content-model/export/{entity_type}/{bundle}'
+  defaults:
+    _controller: 'Drupal\content_model_report\Controller\ContentModelReportController::export'
+  requirements:
+    _permission: administer site configuration

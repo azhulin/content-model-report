@@ -1,0 +1,9 @@
+page:
+  version: 1.x
+  css:
+    component:
+      libraries/page/page.css: {}
+  js:
+    libraries/page/page.js: {}
+  dependencies:
+    - core/jquery
