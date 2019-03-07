@@ -1,3 +1,11 @@
+content_model_report.settings:
+  path: '/admin/reports/content-model/settings'
+  defaults:
+    _form: 'Drupal\content_model_report\Form\ContentModelReportSettingsForm'
+    _title: 'Content Model'
+  requirements:
+    _permission: administer site configuration
+
 content_model_report.page:
   path: '/admin/reports/content-model'
   defaults:

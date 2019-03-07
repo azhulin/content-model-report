@@ -1,0 +1,9 @@
+content_model_report.page:
+  route_name: content_model_report.page
+  title: Report
+  base_route: content_model_report.page
+
+content_model_report.settings:
+  route_name: content_model_report.settings
+  title: Settings
+  base_route: content_model_report.page

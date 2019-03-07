@@ -2,8 +2,10 @@
 
 namespace Drupal\content_model_report\Controller;
 
+use Drupal\content_model_report\ContentModelReportManager;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Url;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -12,12 +14,45 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ContentModelReportController extends ControllerBase {
 
   /**
+   * The content model report manager.
+   *
+   * @var \Drupal\content_model_report\ContentModelReportManager
+   */
+  protected $cmrManager;
+
+  /**
+   * Constructs a ContentModelReportController object.
+   *
+   * @param \Drupal\content_model_report\ContentModelReportManager $cmr_manager
+   *   The content model report manager.
+   */
+  public function __construct(ContentModelReportManager $cmr_manager) {
+    $this->cmrManager = $cmr_manager;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container) {
+    return new static(
+      $container->get('content_model_report.manager')
+    );
+  }
+
+  /**
    * Builds content model report page.
    *
    * @return array
    *   Render array.
    */
   public function page() {
+    $data = $this->cmrManager->data();
+    if (!$data) {
+      return [
+        '#type' => 'item',
+        '#title' => $this->t('There is no data to display.'),
+      ];
+    }
     $build = [];
     $header = [
       $this->t('Name'),
@@ -27,7 +62,6 @@ class ContentModelReportController extends ControllerBase {
       $this->t('Translatable'),
       $this->t('Description'),
     ];
-    $data = content_model_report_data();
     foreach ($data as $entity_type => $entity_type_data) {
       $build[$entity_type] = [
         '#type' => 'details',
@@ -43,7 +77,7 @@ class ContentModelReportController extends ControllerBase {
           $references = [];
           foreach ($field_data['references'] as $reference) {
             list($ref_entity_type, $ref_bundle) = explode('.', $reference);
-            $exists = content_model_report_data($ref_entity_type, $ref_bundle);
+            $exists = $this->cmrManager->data($ref_entity_type, $ref_bundle);
             $references[] = $exists ? [
               '#type' => 'link',
               '#title' => $reference,
@@ -141,7 +175,7 @@ class ContentModelReportController extends ControllerBase {
    */
   public function export(string $entity_type, string $bundle) {
     $response = new StreamedResponse();
-    $records = content_model_report_data($entity_type, $bundle)['fields'] ?? [];
+    $records = $this->cmrManager->data($entity_type, $bundle)['fields'] ?? [];
     $response->setCallback(function () use ($records) {
       $handle = fopen('php://output', 'r+');
       $header = [
