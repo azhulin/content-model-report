@@ -2,6 +2,7 @@
 
 namespace Drupal\content_model_report;
 
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -11,6 +12,13 @@ use Drupal\Core\Field\FieldTypePluginManagerInterface;
  * The content model report manager.
  */
 class ContentModelReportManager {
+
+  /**
+   * Contains the content_model_report.settings configuration object.
+   *
+   * @var \Drupal\Core\Config\Config
+   */
+  protected $config;
 
   /**
    * The entity type manager.
@@ -43,6 +51,8 @@ class ContentModelReportManager {
   /**
    * Constructs a ContentModelReportManager object.
    *
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
+   *   The config factory.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
    *   The entity type manager.
    * @param \Drupal\Core\Entity\EntityTypeBundleInfoInterface $entity_type_bundle_info
@@ -52,7 +62,8 @@ class ContentModelReportManager {
    * @param \Drupal\Core\Field\FieldTypePluginManagerInterface $field_type_plugin_manager
    *   The field type plugin manager.
    */
-  public function __construct(EntityTypeManagerInterface $entity_type_manager, EntityTypeBundleInfoInterface $entity_type_bundle_info, EntityFieldManagerInterface $entity_field_manager, FieldTypePluginManagerInterface $field_type_plugin_manager) {
+  public function __construct(ConfigFactoryInterface $config_factory, EntityTypeManagerInterface $entity_type_manager, EntityTypeBundleInfoInterface $entity_type_bundle_info, EntityFieldManagerInterface $entity_field_manager, FieldTypePluginManagerInterface $field_type_plugin_manager) {
+    $this->config = $config_factory->get('content_model_report.settings');
     $this->entityTypeManager = $entity_type_manager;
     $this->entityTypeBundleInfo = $entity_type_bundle_info;
     $this->entityFieldManager = $entity_field_manager;
@@ -74,14 +85,9 @@ class ContentModelReportManager {
     static $data = NULL;
     if (!isset($data)) {
       $data = [];
-      $map = [
-        'node.*' => TRUE,
-        'node.sdf' => TRUE,
-        /*'media.*' => FALSE,*/
-      ];
-      $this->expandMap($map);
+      $map = $this->getMap($this->config->get('report.entity_bundles'));
       do {
-        $updated = FALSE;
+        $needs_update = FALSE;
         foreach ($map as $key => &$process) {
           if (!$process) {
             continue;
@@ -109,21 +115,12 @@ class ContentModelReportManager {
             'fields' => $this->fieldData($type, $bundle, $references),
           ];
           foreach ($references as $reference) {
-            $updated = TRUE;
+            $needs_update = TRUE;
             isset($map[$reference]) || $map[$reference] = TRUE;
           }
         }
-      } while ($updated);
-      $sort_callback = function ($a, $b) {
-        return $a['label'] <=> $b['label'];
-      };
-      uasort($data, $sort_callback);
-      foreach ($data as &$type_data) {
-        uasort($type_data['bundles'], $sort_callback);
-        foreach ($type_data['bundles'] as &$bundle_data) {
-          uasort($bundle_data['fields'], $sort_callback);
-        }
-      }
+      } while ($needs_update);
+      $this->sortData($data);
     }
     $result = $data;
     if (isset($for_type)) {
@@ -149,18 +146,14 @@ class ContentModelReportManager {
    *   An associative array containing field info.
    */
   function fieldData(string $type, string $bundle, array &$references = []): array {
-    static $include_base_fields = [
-      'block_content' => ['info'],
-      'node' => ['title'],
-      'taxonomy_term' => ['name', 'description', 'weight', 'parent'],
-    ];
+    $include_base_fields = $this->config->get('report.base_fields');
     $data = [];
     $base_fields = $this->entityFieldManager->getBaseFieldDefinitions($type);
     $fields = $this->entityFieldManager->getFieldDefinitions($type, $bundle);
     $field_types = $this->fieldTypePluginManager->getDefinitions();
     foreach ($fields as $field => $field_info) {
       if (isset($base_fields[$field])
-          && !in_array($field, $include_base_fields[$type] ?? [])) {
+          && !in_array("$type.$field", $include_base_fields)) {
         continue;
       }
       $field_references = [];
@@ -192,16 +185,21 @@ class ContentModelReportManager {
   }
 
   /**
-   * Expands entity bundle map wildcards.
+   * Returns entity bundles mapping.
    *
-   * @param array &$map
-   *   Entity bundle map.
+   * @param array $entity_bundles
+   *   An array of entity bundles.
+   *
+   * @return array
+   *   An associative array representing entity bundles mapping.
    */
-  protected function expandMap(array &$map) {
-    foreach ($map as $key => $process) {
+  protected function getMap(array $entity_bundles): array {
+    $map = [];
+    foreach ($entity_bundles as $key) {
+      $process = '~' !== $key[0];
+      $key = ltrim($key, '~');
       list($type, $bundle) = explode('.', $key);
       if ('*' === $bundle) {
-        unset($map[$key]);
         if ($this->entityTypeManager->getDefinition($type, FALSE)) {
           $bundle_info = $this->entityTypeBundleInfo->getBundleInfo($type);
           foreach (array_keys($bundle_info) as $bundle) {
@@ -209,6 +207,29 @@ class ContentModelReportManager {
             isset($map[$expanded_key]) || $map[$expanded_key] = $process;
           }
         }
+      }
+      else {
+        $map[$key] = $process;
+      }
+    }
+    return $map;
+  }
+
+  /**
+   * Sorts report data structure.
+   *
+   * @param array &$data
+   *   Report data to sort.
+   */
+  protected function sortData(array &$data) {
+    $callback = function ($a, $b) {
+      return $a['label'] <=> $b['label'];
+    };
+    uasort($data, $callback);
+    foreach ($data as &$type_data) {
+      uasort($type_data['bundles'], $callback);
+      foreach ($type_data['bundles'] as &$bundle_data) {
+        uasort($bundle_data['fields'], $callback);
       }
     }
   }

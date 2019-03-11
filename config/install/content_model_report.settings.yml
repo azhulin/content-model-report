@@ -1,0 +1,6 @@
+report:
+  entity_bundles:
+    - node.*
+  include_references: true
+  base_fields:
+    - node.title

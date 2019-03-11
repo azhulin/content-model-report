@@ -1,0 +1,24 @@
+content_model_report.settings:
+  type: config_object
+  label: Content Model
+  mapping:
+    report:
+      type: mapping
+      label: Report
+      mapping:
+        entity_bundles:
+          type: sequence
+          label: Entity bundles
+          sequence:
+            type: string
+            label: Entity bundle
+        include_references:
+          type: boolean
+          label: Include references
+        base_fields:
+          type: sequence
+          label: Base fields
+          nullable: true
+          sequence:
+            type: string
+            label: Base field
